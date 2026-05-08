@@ -1,6 +1,4 @@
-تقدر تحط الـ README بالشكل الاحترافي ده 👇
 
----
 
 # 🏠 Real Estate Price Prediction using Machine Learning
 
@@ -235,15 +233,7 @@ project/
 ├── README.md
 ├── requirements.txt
 └── datasets/
-```
 
----
-
-# 👨‍💻 Author
-
-Real Estate Analysis Project using Machine Learning and Real Data.
-
----
 
 # 📌 Notes
 
