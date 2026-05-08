@@ -1,6 +1,11 @@
-
-
 # 🏠 Real Estate Price Prediction using Machine Learning
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+
+This project focuses on analyzing customer behavior to support smarter marketing decisions.
+By leveraging advanced **clustering techniques**, we aim to uncover natural customer segments that enable **targeted marketing**, improve customer engagement, and increase campaign effectiveness. 
+
+---
 
 ## 📌 Project Overview
 
