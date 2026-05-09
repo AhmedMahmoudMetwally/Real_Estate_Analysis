@@ -235,7 +235,7 @@ def get_model_data(df, dataset_name, training_mode):
         st.session_state['model_data_cache_key'] = cache_key
     return st.session_state['model_data_cache']
 
-# =================== HELPER FUNCTIONS FOR REPETITIVE CODE ===================
+#  HELPER FUNCTIONS FOR REPETITIVE CODE 
 
 def display_feature_importance(model_data, model_name):
     """Display feature importance for tree-based models."""
@@ -327,7 +327,7 @@ def perform_feature_selection(importance_df, model_data):
     else:
         st.warning("⚠️ Slight drop in performance, but model is simpler.")
 
-# =================== SECTION HANDLERS ===================
+#  SECTION HANDLERS 
 
 def handle_section_1():
     st.header(f"📋 Data Description: {dataset_name}")
@@ -977,7 +977,7 @@ def handle_section_8():
     else:
         st.warning("No valid factors were selected using the Kaiser criterion. Try reducing features or changing the dataset.")
 
-# =================== MAIN NAVIGATION ===================
+#  MAIN NAVIGATION
 
 # Navigation
 section = st.sidebar.radio("Go to:", [
