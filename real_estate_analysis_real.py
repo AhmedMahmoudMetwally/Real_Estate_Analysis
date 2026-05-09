@@ -46,7 +46,7 @@ def calculate_kmo(df):
     return numerator / denominator if denominator != 0 else np.nan
 
 # Set page config
-st.set_page_config(page_title="Real Estate Analysis - Real Data", layout="wide")
+st.set_page_config(page_title="Real Estate Analysis ", layout="wide")
 
 
 # LOAD  DATASETS
@@ -91,7 +91,7 @@ def load_uci_real_estate():
 
 # DATASET SELECTION
 
-st.title("🏠 Real Estate Price Prediction - Real Data Analysis")
+st.title("🏠 Real Estate Price Prediction ")
 st.markdown("---")
 
 # Dataset selector
@@ -141,7 +141,7 @@ if df is None:
     })
     dataset_name = "Synthetic California-Style Data"
 
-st.sidebar.success(f"✅ Loaded: {dataset_name}")
+st.sidebar.success(f" Loaded: {dataset_name}")
 st.sidebar.write(f"**Samples:** {df.shape[0]:,}")
 st.sidebar.write(f"**Features:** {df.shape[1] - 1}")
 
