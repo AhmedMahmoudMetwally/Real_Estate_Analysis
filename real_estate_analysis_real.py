@@ -51,7 +51,6 @@ st.set_page_config(page_title="Real Estate Analysis - Real Data", layout="wide")
 
 # LOAD  DATASETS
 
-
 @st.cache_data
 def load_california_housing():
     """Load California Housing dataset from reliable source"""
@@ -91,7 +90,6 @@ def load_uci_real_estate():
 
 
 # DATASET SELECTION
-
 
 st.title("🏠 Real Estate Price Prediction - Real Data Analysis")
 st.markdown("---")
@@ -212,7 +210,7 @@ def prepare_model_data(df, training_mode):
     status_text.empty()
     return {
         'X': X,
-        'y': y,  # <--- THIS WAS MISSING! Now y is returned
+        'y': y,
         'scaler': scaler,
         'X_scaled': X_scaled,
         'X_train': X_train,
@@ -237,22 +235,101 @@ def get_model_data(df, dataset_name, training_mode):
         st.session_state['model_data_cache_key'] = cache_key
     return st.session_state['model_data_cache']
 
-# Navigation
-section = st.sidebar.radio("Go to:", [
-    "1. Data Description & Goals",
-    "2. ML Algorithms Explanation",
-    "3. Data Preparation & Cleaning",
-    "4. Challenges Faced",
-    "5. Model Training & Comparison",
-    "6. Conclusion & Best Model",
-    "7. Future Analysis & Predictions",
-    "8. Factor Analysis"
-])
+# =================== HELPER FUNCTIONS FOR REPETITIVE CODE ===================
 
-#  DATA DESCRIPTION
+def display_feature_importance(model_data, model_name):
+    """Display feature importance for tree-based models."""
+    st.subheader(f"🔍 Feature Importance ({model_name})")
+    model = model_data['models'][model_name]
+    X = model_data['X']
+    importances = model.feature_importances_
+    features = X.columns
+    
+    importance_df = pd.DataFrame({'Feature': features, 'Importance': importances})
+    importance_df = importance_df.sort_values('Importance', ascending=True)
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.barh(importance_df['Feature'], importance_df['Importance'], color='teal', alpha=0.7)
+    ax.set_xlabel('Importance Score', fontsize=12)
+    ax.set_title(f'Feature Importance Analysis - {model_name}', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    
+    for i, (feature, importance) in enumerate(zip(importance_df['Feature'], importance_df['Importance'])):
+        ax.text(importance + 0.01, i, f'{importance:.3f}', va='center')
+    
+    st.pyplot(fig)
+    
+    top_feature = importance_df.iloc[-1]['Feature']
+    top_importance = importance_df.iloc[-1]['Importance']
+    st.info(f"💡 **Insight:** '{top_feature}' is the most important feature, contributing {top_importance:.1%} to price prediction. This aligns with real estate economics theory!")
+    
+    return importance_df
 
+def perform_feature_selection(importance_df, model_data):
+    """Perform feature selection based on importance and retrain model."""
+    st.subheader("🎯 Feature Selection")
+    top_n = min(10, len(importance_df))
+    selected_features = importance_df.nlargest(top_n, 'Importance')['Feature'].tolist()
+    st.write(f"**Top {top_n} Selected Features (based on importance):**")
+    for i, feat in enumerate(selected_features, 1):
+        imp = importance_df[importance_df['Feature'] == feat]['Importance'].values[0]
+        st.write(f"{i}. {feat} (Importance: {imp:.3f})")
+    st.markdown("**Why Feature Selection?** Reduces overfitting, improves model interpretability, and speeds up training by focusing on key predictors.")
+    
+    # Retrain with selected features
+    st.subheader("🔄 Model Performance with Selected Features")
+    X = model_data['X']
+    y = model_data['y']
+    best_tree_model = model_data['best_tree_model']
+    
+    X_selected = X[selected_features]
+    
+    # Split selected features
+    X_selected_train, X_selected_test, y_train_split, y_test_split = train_test_split(X_selected, y, test_size=0.2, random_state=42)
+    
+    scaler_selected = RobustScaler()
+    X_selected_train_scaled = scaler_selected.fit_transform(X_selected_train)
+    X_selected_test_scaled = scaler_selected.transform(X_selected_test)
+    
+    # Retrain the best tree model with selected features
+    if best_tree_model == 'Random Forest':
+        model_class = RandomForestRegressor
+    elif best_tree_model == 'Gradient Boosting':
+        model_class = GradientBoostingRegressor
+    else:
+        model_class = RandomForestRegressor
+    
+    model_selected = model_class(random_state=42)
+    model_selected.fit(X_selected_train_scaled, y_train_split)
+    y_pred_selected = model_selected.predict(X_selected_test_scaled)
+    
+    r2_selected = r2_score(y_test_split, y_pred_selected)
+    rmse_selected = np.sqrt(mean_squared_error(y_test_split, y_pred_selected))
+    mae_selected = mean_absolute_error(y_test_split, y_pred_selected)
+    
+    # Compare with original model
+    results_df = model_data['results_df']
+    original_r2 = results_df[results_df['Model'] == best_tree_model]['R² Score'].values[0]
+    original_rmse = results_df[results_df['Model'] == best_tree_model]['RMSE'].values[0]
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("R² Score (All Features)", f"{original_r2:.4f}")
+        st.metric("R² Score (Selected)", f"{r2_selected:.4f}", delta=f"{(r2_selected - original_r2)*100:.1f}%")
+    with col2:
+        st.metric("RMSE (All Features)", f"{original_rmse:.2f}")
+        st.metric("RMSE (Selected)", f"{rmse_selected:.2f}", delta=f"{(original_rmse - rmse_selected):.2f}")
+    
+    if r2_selected > original_r2:
+        st.success("✅ Feature selection improved performance!")
+    elif abs(r2_selected - original_r2) < 0.01:
+        st.info("ℹ️ Performance similar with fewer features.")
+    else:
+        st.warning("⚠️ Slight drop in performance, but model is simpler.")
 
-if section == "1. Data Description & Goals":
+# =================== SECTION HANDLERS ===================
+
+def handle_section_1():
     st.header(f"📋 Data Description: {dataset_name}")
     
     col1, col2 = st.columns(2)
@@ -268,7 +345,6 @@ if section == "1. Data Description & Goals":
             st.write(f"- {col}")
         st.write(f"**Target Variable:** {df.columns[-1]}")
         
-        # Show data preview
         st.subheader("Data Preview (First 10 rows)")
         st.dataframe(df.head(10))
     
@@ -289,32 +365,27 @@ if section == "1. Data Description & Goals":
     3. **Dataset Context:** {dataset_name} contains actual real estate records
     """)
     
-    # Visualizations
     st.subheader("📊 Data Visualizations")
     
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    # Target distribution
     target_col = df.columns[-1]
     axes[0, 0].hist(df[target_col], bins=50, color='skyblue', edgecolor='black', alpha=0.7)
     axes[0, 0].set_title(f'{target_col} Distribution', fontsize=12, fontweight='bold')
     axes[0, 0].set_xlabel(target_col)
     axes[0, 0].set_ylabel('Frequency')
     
-    # First feature vs target
     first_feature = df.columns[0]
     axes[0, 1].scatter(df[first_feature], df[target_col], alpha=0.5, c='coral')
     axes[0, 1].set_title(f'{first_feature} vs {target_col}', fontsize=12, fontweight='bold')
     axes[0, 1].set_xlabel(first_feature)
     axes[0, 1].set_ylabel(target_col)
     
-    # Correlation heatmap
     corr_matrix = df.corr()
     sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0, 
                 square=True, linewidths=0.5, ax=axes[1, 0])
     axes[1, 0].set_title('Feature Correlation Matrix', fontsize=12, fontweight='bold')
     
-    # Box plot for target
     axes[1, 1].boxplot(df[target_col])
     axes[1, 1].set_title(f'{target_col} Box Plot', fontsize=12, fontweight='bold')
     axes[1, 1].set_ylabel(target_col)
@@ -322,7 +393,6 @@ if section == "1. Data Description & Goals":
     plt.tight_layout()
     st.pyplot(fig)
     
-    # Feature correlation with target
     st.subheader("🔍 Feature Correlation with Target")
     correlations = df.corr()[target_col].drop(target_col).sort_values(ascending=False)
     
@@ -336,10 +406,7 @@ if section == "1. Data Description & Goals":
     plt.tight_layout()
     st.pyplot(fig)
 
-# SECTION 2: ML ALGORITHMS EXPLANATION
-
-
-elif section == "2. ML Algorithms Explanation":
+def handle_section_2():
     st.header("🤖 Machine Learning Algorithms Used")
     st.markdown("Learn why each model was chosen, how it works, and when it performs best on real estate data.")
     
@@ -392,15 +459,11 @@ elif section == "2. ML Algorithms Explanation":
             st.markdown(f"**❌ Cons:** {info['cons']}")
             st.write("---")
 
-#  SECTION 3: DATA PREPARATION
-
-
-elif section == "3. Data Preparation & Cleaning":
+def handle_section_3():
     st.header("🧹 Real Data: Preparation & Cleaning")
     
     st.subheader("Initial Data Quality Check")
     
-    # Check for missing values
     missing_values = df.isnull().sum()
     missing_pct = (missing_values / len(df)) * 100
     
@@ -412,7 +475,6 @@ elif section == "3. Data Preparation & Cleaning":
     with col3:
         st.metric("Data Types", len(df.dtypes.unique()))
     
-    # Show missing values if any
     if missing_values.sum() > 0:
         st.subheader("Missing Values Analysis")
         missing_df = pd.DataFrame({
@@ -422,7 +484,6 @@ elif section == "3. Data Preparation & Cleaning":
         })
         st.dataframe(missing_df)
         
-        # Handle missing values
         st.subheader("Missing Value Treatment")
         st.markdown("""
         **Strategy Applied:**
@@ -431,15 +492,12 @@ elif section == "3. Data Preparation & Cleaning":
         - Categorical columns are filled with mode values
         """)
         
-        # Drop columns with more than 50% missing values
         high_missing_cols = [col for col in df.columns if df[col].isnull().mean() > 0.5]
         if high_missing_cols:
             df.drop(columns=high_missing_cols, inplace=True)
             st.warning(f"Dropped columns with >50% missing values: {', '.join(high_missing_cols)}")
             missing_values = df.isnull().sum()
-            missing_pct = (missing_values / len(df)) * 100
         
-        # Apply filling
         for col in df.columns:
             if df[col].isnull().sum() > 0:
                 if df[col].dtype in ['int64', 'float64']:
@@ -449,11 +507,9 @@ elif section == "3. Data Preparation & Cleaning":
         
         st.success("Missing values have been handled!")
     
-    # Outlier detection
     st.subheader("Outlier Detection")
     target_col = df.columns[-1]
     
-    # Apply percentile capping to reduce extreme outliers
     numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
     lower_bound = df[numeric_cols].quantile(0.01)
     upper_bound = df[numeric_cols].quantile(0.99)
@@ -495,14 +551,10 @@ elif section == "3. Data Preparation & Cleaning":
     5. **Handling Categorical Features:** Label encoding if present
     """)
 
-# SECTION 4: CHALLENGES FACED WITH REAL DATA
-
-
-elif section == "4. Challenges Faced":
+def handle_section_4():
     st.header("⚠️ Real Data Challenges & Solutions")
     st.markdown("This section highlights the main data issues discovered in the selected dataset and the practical solutions applied.")
     
-    # Detect actual challenges in the loaded data
     challenges_faced = []
     missing_total = int(df.isnull().sum().sum())
     target_col = df.columns[-1]
@@ -568,26 +620,21 @@ elif section == "4. Challenges Faced":
                 st.markdown(f"**Impact:** {item['impact']}")
             st.markdown("---")
 
-#  MODEL TRAINING & COMPARISON
-
-
-elif section == "5. Model Training & Comparison":
+def handle_section_5():
     st.header("📊 Model Training on Real Data")
     
     model_data = get_model_data(df, dataset_name, training_mode)
     results_df = model_data['results_df']
     predictions = model_data['predictions']
     X = model_data['X']
-    y = model_data['y']  # <--- THIS WAS MISSING! Now y is retrieved from model_data
+    y = model_data['y']
     X_scaled = model_data['X_scaled']
     y_test = model_data['y_test']
     y_train = model_data['y_train']
     models = model_data['models']
    
-    
     st.subheader("🏆 Model Performance Comparison on Real Data")
     
-    # Display metrics
     st.dataframe(results_df.style.format({
         'R² Score': '{:.4f}',
         'RMSE': '{:,.2f}',
@@ -596,10 +643,8 @@ elif section == "5. Model Training & Comparison":
         'CV Std': '{:.4f}'
     }).background_gradient(subset=['R² Score'], cmap='RdYlGn'))
     
-    # Performance chart
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     
-    # R² Score bar chart
     bars1 = ax1.bar(results_df['Model'], results_df['R² Score'], 
                     color=['gold' if i==0 else 'steelblue' for i in range(len(results_df))],
                     alpha=0.7)
@@ -615,7 +660,6 @@ elif section == "5. Model Training & Comparison":
         ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
                 f'{score:.3f}', ha='center', fontsize=9)
     
-    # RMSE comparison (lower is better)
     bars2 = ax2.bar(results_df['Model'], results_df['RMSE'], 
                     color='coral', alpha=0.7)
     ax2.set_title('RMSE by Model (Lower is Better)', fontsize=12, fontweight='bold')
@@ -630,7 +674,6 @@ elif section == "5. Model Training & Comparison":
     plt.tight_layout()
     st.pyplot(fig)
     
-    # Prediction vs Actual for top 3
     st.subheader("📈 Prediction vs Actual Values (Top 3 Models)")
     
     top_models = results_df.head(3)['Model'].values
@@ -656,100 +699,13 @@ elif section == "5. Model Training & Comparison":
     plt.tight_layout()
     st.pyplot(fig)
     
-    # Feature Importance for best tree-based model
-    best_tree_model = None
-    for name in ['Random Forest', 'Gradient Boosting']:
-        if name in results_df.head(2)['Model'].values:
-            best_tree_model = name
-            break
+    best_tree_model = model_data['best_tree_model']
     
     if best_tree_model:
-        st.subheader(f"🔍 Feature Importance ({best_tree_model})")
-        
-        best_model = models[best_tree_model]
-        importances = best_model.feature_importances_
-        features = X.columns
-        
-        importance_df = pd.DataFrame({'Feature': features, 'Importance': importances})
-        importance_df = importance_df.sort_values('Importance', ascending=True)
-        
-        fig, ax = plt.subplots(figsize=(10, 6))
-        bars = ax.barh(importance_df['Feature'], importance_df['Importance'], 
-                       color='teal', alpha=0.7)
-        ax.set_xlabel('Importance Score', fontsize=12)
-        ax.set_title(f'Feature Importance Analysis - {best_tree_model}', fontsize=14, fontweight='bold')
-        ax.grid(True, alpha=0.3)
-        
-        for i, (feature, importance) in enumerate(zip(importance_df['Feature'], importance_df['Importance'])):
-            ax.text(importance + 0.01, i, f'{importance:.3f}', va='center')
-        
-        st.pyplot(fig)
-        
-        top_feature = importance_df.iloc[-1]['Feature']
-        top_importance = importance_df.iloc[-1]['Importance']
-        st.info(f"💡 **Insight:** '{top_feature}' is the most important feature, contributing {top_importance:.1%} to price prediction. This aligns with real estate economics theory!")
-        
-        # Feature Selection
-        st.subheader("🎯 Feature Selection")
-        top_n = min(10, len(importance_df))
-        selected_features = importance_df.nlargest(top_n, 'Importance')['Feature'].tolist()
-        st.write(f"**Top {top_n} Selected Features (based on importance):**")
-        for i, feat in enumerate(selected_features, 1):
-            imp = importance_df[importance_df['Feature'] == feat]['Importance'].values[0]
-            st.write(f"{i}. {feat} (Importance: {imp:.3f})")
-        st.markdown("**Why Feature Selection?** Reduces overfitting, improves model interpretability, and speeds up training by focusing on key predictors.")
-        
-        # Retrain with selected features
-        st.subheader("🔄 Model Performance with Selected Features")
-        X_selected = X[selected_features]
-        
-        # Split selected features
-        X_selected_train, X_selected_test, y_train_split, y_test_split = train_test_split(X_selected, y, test_size=0.2, random_state=42)
-        
-        scaler_selected = RobustScaler()
-        X_selected_train_scaled = scaler_selected.fit_transform(X_selected_train)
-        X_selected_test_scaled = scaler_selected.transform(X_selected_test)
-        
-        # Retrain the best tree model with selected features
-        if best_tree_model == 'Random Forest':
-            model_class = RandomForestRegressor
-        elif best_tree_model == 'Gradient Boosting':
-            model_class = GradientBoostingRegressor
-        else:
-            model_class = RandomForestRegressor  # fallback
-        
-        model_selected = model_class(random_state=42)
-        model_selected.fit(X_selected_train_scaled, y_train_split)
-        y_pred_selected = model_selected.predict(X_selected_test_scaled)
-        
-        r2_selected = r2_score(y_test_split, y_pred_selected)
-        rmse_selected = np.sqrt(mean_squared_error(y_test_split, y_pred_selected))
-        mae_selected = mean_absolute_error(y_test_split, y_pred_selected)
-        
-        # Compare
-        original_r2 = results_df[results_df['Model'] == best_tree_model]['R² Score'].values[0]
-        original_rmse = results_df[results_df['Model'] == best_tree_model]['RMSE'].values[0]
-        original_mae = results_df[results_df['Model'] == best_tree_model]['MAE'].values[0]
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("R² Score (All Features)", f"{original_r2:.4f}")
-            st.metric("R² Score (Selected)", f"{r2_selected:.4f}", delta=f"{(r2_selected - original_r2)*100:.1f}%")
-        with col2:
-            st.metric("RMSE (All Features)", f"{original_rmse:.2f}")
-            st.metric("RMSE (Selected)", f"{rmse_selected:.2f}", delta=f"{(original_rmse - rmse_selected):.2f}")
-        
-        if r2_selected > original_r2:
-            st.success("✅ Feature selection improved performance!")
-        elif abs(r2_selected - original_r2) < 0.01:
-            st.info("ℹ️ Performance similar with fewer features.")
-        else:
-            st.warning("⚠️ Slight drop in performance, but model is simpler.")
+        importance_df = display_feature_importance(model_data, best_tree_model)
+        perform_feature_selection(importance_df, model_data)
 
-# CONCLUSION
-
-
-elif section == "6. Conclusion & Best Model":
+def handle_section_6():
     st.header("🎯 Conclusion & Recommended Model")
     
     model_data = get_model_data(df, dataset_name, training_mode)
@@ -795,7 +751,6 @@ elif section == "6. Conclusion & Best Model":
     
     st.subheader("📌 Key Findings from Real Data Analysis")
     
-    # Calculate some insights
     target_col = df.columns[-1]
     best_feature_corr = df.corr()[target_col].drop(target_col).abs().idxmax()
     best_corr_value = df.corr()[target_col][best_feature_corr]
@@ -811,10 +766,7 @@ elif section == "6. Conclusion & Best Model":
     with col3:
         st.metric("Dataset Size", f"{df.shape[0]:,}", "Real samples")
 
-#  FUTURE ANALYSIS
-
-
-elif section == "7. Future Analysis & Predictions":
+def handle_section_7():
     st.header("🔮 Future Analysis & Interactive Predictions")
     
     st.subheader("Potential Improvements for Real Data Analysis")
@@ -851,10 +803,8 @@ elif section == "7. Future Analysis & Predictions":
     
     st.markdown("---")
     
-    # Interactive prediction tool
     st.subheader("🎮 Interactive Price Predictor")
     model_data = get_model_data(df, dataset_name, training_mode)
-    # Get best model name from results
     results_df_local = model_data['results_df']
     best_model_name = results_df_local.loc[results_df_local['R² Score'].idxmax(), 'Model']
     st.markdown(f"**Using best model: {best_model_name}**")
@@ -865,13 +815,11 @@ elif section == "7. Future Analysis & Predictions":
     
     st.markdown("### Adjust property features to predict price:")
     
-    # Create input widgets based on features
     numeric_cols = X.select_dtypes(include=['int64', 'float64']).columns
     input_values = {}
     
-    # Create 3 columns for inputs
     cols = st.columns(3)
-    for idx, col in enumerate(numeric_cols[:6]):  # Limit to first 6 features
+    for idx, col in enumerate(numeric_cols[:6]):
         with cols[idx % 3]:
             min_val = float(X[col].min())
             max_val = float(X[col].max())
@@ -885,10 +833,8 @@ elif section == "7. Future Analysis & Predictions":
             )
     
     if st.button("🔮 Predict Price", type="primary"):
-        # Create input dataframe
         input_df = pd.DataFrame([input_values])
         
-        # Ensure all columns match
         for col in X.columns:
             if col not in input_df.columns:
                 input_df[col] = X[col].mean()
@@ -901,10 +847,7 @@ elif section == "7. Future Analysis & Predictions":
         st.success(f"### 💰 Predicted {target_name}: **{prediction:,.2f}**")
         st.info("💡 This prediction is based on real market data and ML models. Actual prices may vary based on market conditions.")
 
-# FACTOR ANALYSIS SECTION
-
-
-elif section == "8. Factor Analysis":
+def handle_section_8():
     st.header("🔍 Factor Analysis on Real Estate Features")
     
     st.markdown("""
@@ -912,11 +855,9 @@ elif section == "8. Factor Analysis":
     This section selects the best number of factors, applies factor analysis, and rotates the results with Varimax for clearer interpretation.
     """)
     
-    # Prepare data
     X = df.drop(df.columns[-1], axis=1)
     y = df[df.columns[-1]]
     
-    # Handle categorical columns if any
     categorical_cols = X.select_dtypes(include=['object']).columns
     if len(categorical_cols) > 0:
         st.warning("Non-numeric features have been encoded to enable factor analysis; this is not ideal for factor analysis.")
@@ -924,7 +865,6 @@ elif section == "8. Factor Analysis":
             le = LabelEncoder()
             X[col] = le.fit_transform(X[col])
     
-    # Scale features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
@@ -937,7 +877,6 @@ elif section == "8. Factor Analysis":
     except Exception:
         st.info("KMO is unavailable for this dataset due to a correlation matrix issue.")
     
-    # Determine optimal number of factors
     pca = PCA()
     pca.fit(X_scaled)
     eigenvalues = pca.explained_variance_
@@ -1037,6 +976,38 @@ elif section == "8. Factor Analysis":
         st.success("Factor analysis has been enhanced with rotation and data adequacy checks.")
     else:
         st.warning("No valid factors were selected using the Kaiser criterion. Try reducing features or changing the dataset.")
+
+# =================== MAIN NAVIGATION ===================
+
+# Navigation
+section = st.sidebar.radio("Go to:", [
+    "1. Data Description & Goals",
+    "2. ML Algorithms Explanation",
+    "3. Data Preparation & Cleaning",
+    "4. Challenges Faced",
+    "5. Model Training & Comparison",
+    "6. Conclusion & Best Model",
+    "7. Future Analysis & Predictions",
+    "8. Factor Analysis"
+])
+
+# Route to appropriate section handler
+if section == "1. Data Description & Goals":
+    handle_section_1()
+elif section == "2. ML Algorithms Explanation":
+    handle_section_2()
+elif section == "3. Data Preparation & Cleaning":
+    handle_section_3()
+elif section == "4. Challenges Faced":
+    handle_section_4()
+elif section == "5. Model Training & Comparison":
+    handle_section_5()
+elif section == "6. Conclusion & Best Model":
+    handle_section_6()
+elif section == "7. Future Analysis & Predictions":
+    handle_section_7()
+elif section == "8. Factor Analysis":
+    handle_section_8()
 
 # Footer
 st.markdown("---")
